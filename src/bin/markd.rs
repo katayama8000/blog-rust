@@ -1,4 +1,5 @@
 use dotenv::dotenv;
+use sqlx::types::chrono::{FixedOffset, Utc};
 use sqlx::PgPool;
 use std::env;
 use std::fs::File;
@@ -6,34 +7,31 @@ use std::io::Read;
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
+    println!("start uploading...");
     let args: Vec<String> = env::args().collect();
-    println!("{}", args[1]);
-    println!("{}", args[2]);
 
-    let inserter;
-
-    match File::open(&args[2]) {
+    let inserter = match File::open(&args[2]) {
         Ok(mut file) => {
             let mut content = String::new();
-            file.read_to_string(&mut content).unwrap();
-            inserter = content;
+            file.read_to_string(&mut content).map_err(|error| {
+                sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
+            })?;
+            content
         }
-        Err(error) => {
-            panic!("{}", format!("Problem opening the file: {:?}", error));
-        }
-    }
+        Err(error) => Err(sqlx::Error::Io(error))?,
+    };
 
     let pool = connect().await.expect("database should connect");
-    let post_id = 2;
-    let _row: (i64,) = sqlx::query_as(
-    "insert into myposts (post_id, post_title, post_body) values ($1, $2, $3) returning post_id",
-)
-.bind(post_id)
-.bind(&args[1])
-.bind(inserter)
-.fetch_one(&pool)
-.await?;
+    let datetime = FixedOffset::east_opt(9 * 3600).expect("offset to be valid");
+    let post_date_jst = Utc::now().with_timezone(&datetime);
+    sqlx::query("insert into myposts (post_title, post_body, post_date) values ($1, $2, $3)")
+        .bind(&args[1])
+        .bind(inserter)
+        .bind(post_date_jst)
+        .execute(&pool)
+        .await?;
 
+    println!("completed uploading!");
     Ok(())
 }
 
@@ -87,7 +85,7 @@ pub async fn connect() -> Result<PgPool, sqlx::Error> {
     let config = DbConfig::from_env();
     let database_url = config.connection();
 
-    println!("Connecting to {}", database_url);
+    println!("🤖Connecting to {}🤖", database_url);
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)

@@ -96,7 +96,7 @@ async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
     }
 
     let template = IndexTemplate {
-        index_title: String::from("My blog"),
+        index_title: String::from("My blog 🐈‍⬛"),
         index_links: &plinks,
     };
 
@@ -113,7 +113,6 @@ async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     let pool = connect().await.expect("database should connect");
-
     let mut posts =
         sqlx::query_as::<_, Post>("select post_title, post_date, post_body from myposts")
             .fetch_all(&pool)

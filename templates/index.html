@@ -2,14 +2,14 @@
 <html>
 
 <head>
-	<title> {{ index_title }} </title>
+	<title>{{ index_title }}</title>
 </head>
 
 <body>
 	<div class="links">
 		<ul>
-			{% for item in index_links %}
-			<li><a href="/post/{{ item}}">{{ item }}</a></li>
+			{% for (id, item) in id.iter().zip(index_links.iter()) %}
+			<li><a href="/post/{{ id }}">{{ id }} {{ item }}</a></li>
 			{% endfor %}
 		</ul>
 	</div>

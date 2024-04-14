@@ -1,7 +1,7 @@
 use crate::config::connect;
 use askama::Template;
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, Router},
@@ -27,6 +27,7 @@ struct PostTemplate<'a> {
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct IndexTemplate<'a> {
+    pub id: &'a Vec<String>,
     pub index_title: String,
     pub index_links: &'a Vec<String>,
 }
@@ -35,6 +36,7 @@ pub struct IndexTemplate<'a> {
 // into a Vec<Post>
 #[derive(FromRow, Debug, Clone)]
 pub struct Post {
+    pub post_id: i32,
     pub post_title: String,
     pub post_date: chrono::NaiveDateTime,
     pub post_body: String,
@@ -52,26 +54,17 @@ mod filters {
 // post router uses two extractors
 // Path to extract the query: localhost:3000/post/thispart
 // State that holds a Vec<Post> used to render the post that the query matches
-async fn post(
-    Path(query_title): Path<String>,
-    State(state): State<Arc<Vec<Post>>>,
-) -> impl IntoResponse {
+async fn post(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
     let mut template = PostTemplate {
         post_title: "none",
         post_date: "none".to_string(),
         post_body: "none",
     };
-    // if the user's query matches a post title then render a template
     for i in 0..state.len() {
-        if query_title == state[i].post_title {
-            template = PostTemplate {
-                post_title: &state[i].post_title,
-                post_date: state[i].post_date.to_string(),
-                post_body: &state[i].post_body,
-            };
-            break;
-        } else {
-            continue;
+        template = PostTemplate {
+            post_title: &state[i].post_title,
+            post_date: state[i].post_date.to_string(),
+            post_body: &state[i].post_body,
         }
     }
 
@@ -90,12 +83,19 @@ async fn post(
 async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
     let s = state.clone();
     let mut plinks: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
 
     for i in 0..s.len() {
         plinks.push(s[i].post_title.clone());
     }
 
+    // collect ids
+    for i in 0..s.len() {
+        ids.push(s[i].post_id.to_string());
+    }
+
     let template = IndexTemplate {
+        id: &ids,
         index_title: String::from("My blog 🐈‍⬛"),
         index_links: &plinks,
     };
@@ -113,11 +113,14 @@ async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     let pool = connect().await.expect("database should connect");
-    let mut posts =
-        sqlx::query_as::<_, Post>("select post_title, post_date, post_body from myposts")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let mut posts = sqlx::query_as::<_, Post>("select * from myposts")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            eprintln!("Error: {:?}", e);
+            e
+        })
+        .expect("posts should be fetched");
 
     for post in &mut posts {
         post.post_title = post.post_title.replace(" ", "-");
@@ -127,9 +130,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/post/:query_title", get(post))
-        .with_state(shared_state)
-        .nest_service("/assets", ServeDir::new("assets"));
+        .route("/post/:id", get(post))
+        .nest_service("/assets", ServeDir::new("assets"))
+        .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

@@ -9,12 +9,12 @@ The blog post basically covers it all. Just make sure the database is running wi
 I created a separate binary to handle inserting a markdown file into the DB. However it's inefficient in the long run as it has now way to edit a blog post. I leave it to the user to create a better way of inserting, updating, deleting blog posts into the database ;)
 
 
-```
-cargo run --bin markd "some title" posts/some_post.md
+```sh
+./post.sh "title" "post"
 ```
 
 then spin up the server
 
-```
-cargo run --bin blog-rs
+```sh
+./watch.sh
 ```

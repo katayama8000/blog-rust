@@ -14,6 +14,7 @@ async fn main() -> Result<(), sqlx::Error> {
         Ok(mut file) => {
             let mut content = String::new();
             file.read_to_string(&mut content).map_err(|error| {
+                eprint!("Error reading file: {:?}", file);
                 sqlx::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, error))
             })?;
             content

@@ -6,14 +6,14 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, Router},
 };
-use sqlx::types::chrono;
+use sqlx::types::chrono::{self, FixedOffset, Local, TimeZone};
 use sqlx::FromRow;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
 pub mod config;
 
 // post template
-// localhost:4000/post/:query_title
+// localhost:3000/post/:query_title
 #[derive(Template)]
 #[template(path = "posts.html")]
 struct PostTemplate<'a> {
@@ -23,10 +23,11 @@ struct PostTemplate<'a> {
 }
 
 // homepage template
-// localhost:4000/
+// localhost:3000/
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct IndexTemplate<'a> {
+    pub id: &'a Vec<String>,
     pub index_title: String,
     pub index_links: &'a Vec<String>,
 }
@@ -35,6 +36,7 @@ pub struct IndexTemplate<'a> {
 // into a Vec<Post>
 #[derive(FromRow, Debug, Clone)]
 pub struct Post {
+    pub post_id: i32,
     pub post_title: String,
     pub post_date: chrono::NaiveDateTime,
     pub post_body: String,
@@ -50,35 +52,24 @@ mod filters {
 }
 
 // post router uses two extractors
-// Path to extract the query: localhost:4000/post/thispart
+// Path to extract the query: localhost:3000/post/thispart
 // State that holds a Vec<Post> used to render the post that the query matches
-async fn post(
-    Path(query_title): Path<String>,
-    State(state): State<Arc<Vec<Post>>>,
-) -> impl IntoResponse {
-    let mut template = PostTemplate {
-        post_title: "none",
-        post_date: "none".to_string(),
-        post_body: "none",
+async fn post(Path(id): Path<String>, State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
+    let id = match id.parse::<usize>() {
+        Ok(parsed_id) if parsed_id > 0 && parsed_id <= state.len() => parsed_id - 1,
+        _ => return (StatusCode::NOT_FOUND, "404 not found").into_response(),
     };
-    // if the user's query matches a post title then render a template
-    for i in 0..state.len() {
-        if query_title == state[i].post_title {
-            template = PostTemplate {
-                post_title: &state[i].post_title,
-                post_date: state[i].post_date.to_string(),
-                post_body: &state[i].post_body,
-            };
-            break;
-        } else {
-            continue;
-        }
-    }
 
-    // 404 if no title found matching the user's query
-    if &template.post_title == &"none" {
-        return (StatusCode::NOT_FOUND, "404 not found").into_response();
-    }
+    let post = &state[id];
+    let local = Local.from_local_datetime(&post.post_date).unwrap();
+    let datetime = FixedOffset::east_opt(9 * 3600).expect("offset to be valid");
+    let post_date_jst = local.with_timezone(&datetime);
+
+    let template = PostTemplate {
+        post_title: &post.post_title,
+        post_date: post_date_jst.format("%Y-%m-%d %H:%M:%S").to_string(),
+        post_body: &post.post_body,
+    };
 
     match template.render() {
         Ok(html) => Html(html).into_response(),
@@ -88,15 +79,17 @@ async fn post(
 
 // index router (homepage) will return all blog titles in anchor links
 async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
-    let s = state.clone();
     let mut plinks: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
 
-    for i in 0..s.len() {
-        plinks.push(s[i].post_title.clone());
+    for post in state.iter() {
+        plinks.push(post.post_title.clone());
+        ids.push(post.post_id.to_string());
     }
 
     let template = IndexTemplate {
-        index_title: String::from("My blog"),
+        id: &ids,
+        index_title: String::from("My blog 🐈‍⬛"),
         index_links: &plinks,
     };
 
@@ -113,12 +106,14 @@ async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     let pool = connect().await.expect("database should connect");
-
-    let mut posts =
-        sqlx::query_as::<_, Post>("select post_title, post_date, post_body from myposts")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let mut posts = sqlx::query_as::<_, Post>("select * from myposts")
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| {
+            eprintln!("Error: {:?}", e);
+            e
+        })
+        .expect("posts should be fetched");
 
     for post in &mut posts {
         post.post_title = post.post_title.replace(" ", "-");
@@ -128,9 +123,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/post/:query_title", get(post))
-        .with_state(shared_state)
-        .nest_service("/assets", ServeDir::new("assets"));
+        .route("/post/:id", get(post))
+        .nest_service("/assets", ServeDir::new("assets"))
+        .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

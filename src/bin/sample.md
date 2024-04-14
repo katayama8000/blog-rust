@@ -1,4 +1,4 @@
-# This is a post 
+# This is a sample post 
 
 with some content 
 

@@ -10,7 +10,7 @@ I created a separate binary to handle inserting a markdown file into the DB. How
 
 
 ```sh
-./post.sh "title" "post"
+./post.sh title file_name
 ```
 
 then spin up the server

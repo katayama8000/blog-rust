@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use sqlx::types::chrono::{FixedOffset, Utc};
+use sqlx::types::chrono::Utc;
 use sqlx::PgPool;
 use std::env;
 use std::fs::File;
@@ -23,12 +23,11 @@ async fn main() -> Result<(), sqlx::Error> {
     };
 
     let pool = connect().await.expect("database should connect");
-    let datetime = FixedOffset::east_opt(9 * 3600).expect("offset to be valid");
-    let post_date_jst = Utc::now().with_timezone(&datetime);
+    let now = Utc::now();
     sqlx::query("insert into myposts (post_title, post_body, post_date) values ($1, $2, $3)")
         .bind(&args[1])
         .bind(inserter)
-        .bind(post_date_jst)
+        .bind(&now)
         .execute(&pool)
         .await?;
 

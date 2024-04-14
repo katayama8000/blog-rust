@@ -1,12 +1,12 @@
 use crate::config::connect;
 use askama::Template;
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, Router},
 };
-use sqlx::types::chrono;
+use sqlx::types::chrono::{self, FixedOffset, Local, TimeZone};
 use sqlx::FromRow;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
@@ -54,24 +54,22 @@ mod filters {
 // post router uses two extractors
 // Path to extract the query: localhost:3000/post/thispart
 // State that holds a Vec<Post> used to render the post that the query matches
-async fn post(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
-    let mut template = PostTemplate {
-        post_title: "none",
-        post_date: "none".to_string(),
-        post_body: "none",
+async fn post(Path(id): Path<String>, State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
+    let id = match id.parse::<usize>() {
+        Ok(parsed_id) if parsed_id > 0 && parsed_id <= state.len() => parsed_id - 1,
+        _ => return (StatusCode::NOT_FOUND, "404 not found").into_response(),
     };
-    for i in 0..state.len() {
-        template = PostTemplate {
-            post_title: &state[i].post_title,
-            post_date: state[i].post_date.to_string(),
-            post_body: &state[i].post_body,
-        }
-    }
 
-    // 404 if no title found matching the user's query
-    if &template.post_title == &"none" {
-        return (StatusCode::NOT_FOUND, "404 not found").into_response();
-    }
+    let post = &state[id];
+    let local = Local.from_local_datetime(&post.post_date).unwrap();
+    let datetime = FixedOffset::east_opt(9 * 3600).expect("offset to be valid");
+    let post_date_jst = local.with_timezone(&datetime);
+
+    let template = PostTemplate {
+        post_title: &post.post_title,
+        post_date: post_date_jst.format("%Y-%m-%d %H:%M:%S").to_string(),
+        post_body: &post.post_body,
+    };
 
     match template.render() {
         Ok(html) => Html(html).into_response(),

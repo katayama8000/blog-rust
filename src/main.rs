@@ -13,7 +13,7 @@ use tower_http::services::ServeDir;
 pub mod config;
 
 // post template
-// localhost:4000/post/:query_title
+// localhost:3000/post/:query_title
 #[derive(Template)]
 #[template(path = "posts.html")]
 struct PostTemplate<'a> {
@@ -23,7 +23,7 @@ struct PostTemplate<'a> {
 }
 
 // homepage template
-// localhost:4000/
+// localhost:3000/
 #[derive(Template)]
 #[template(path = "index.html")]
 pub struct IndexTemplate<'a> {
@@ -50,7 +50,7 @@ mod filters {
 }
 
 // post router uses two extractors
-// Path to extract the query: localhost:4000/post/thispart
+// Path to extract the query: localhost:3000/post/thispart
 // State that holds a Vec<Post> used to render the post that the query matches
 async fn post(
     Path(query_title): Path<String>,

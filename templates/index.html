@@ -9,7 +9,7 @@
 	<div class="links">
 		<ul>
 			{% for (id, item) in id.iter().zip(index_links.iter()) %}
-			<li><a href="/post/{{ id }}">{{ id }} {{ item }}</a></li>
+			<li><a href="/post/{{ id }}">{{ item }}</a></li>
 			{% endfor %}
 		</ul>
 	</div>

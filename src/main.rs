@@ -81,17 +81,12 @@ async fn post(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
 
 // index router (homepage) will return all blog titles in anchor links
 async fn index(State(state): State<Arc<Vec<Post>>>) -> impl IntoResponse {
-    let s = state.clone();
     let mut plinks: Vec<String> = Vec::new();
     let mut ids: Vec<String> = Vec::new();
 
-    for i in 0..s.len() {
-        plinks.push(s[i].post_title.clone());
-    }
-
-    // collect ids
-    for i in 0..s.len() {
-        ids.push(s[i].post_id.to_string());
+    for post in state.iter() {
+        plinks.push(post.post_title.clone());
+        ids.push(post.post_id.to_string());
     }
 
     let template = IndexTemplate {
